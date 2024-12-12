@@ -1,0 +1,15 @@
+python train.py -tn="cs573-proj-dgpt2" -g 4 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.00005 -p 20 -d "logs/tests/srn18_vae_dgpt2/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2/best.pth" -ud -sc 
+python train.py -tn="cs573-proj-dgpt2" -g 4 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.00001 -p 20 -d "logs/tests/srn18_vae_dgpt2/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2/best.pth" -ud -sc 
+python train.py -tn="cs573-proj-dgpt2" -g 4 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.000005 -p 20 -d "logs/tests/srn18_vae_dgpt2/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2/best.pth" -ud -sc 
+
+# z version
+python train.py -tn="cs573-proj-dgpt2" -g 6 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.000005 -p 20 -d "logs/tests/srn18_vae_dgpt2_z3/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2_z/best.pth" -ud -sc 
+python train.py -tn="cs573-proj-dgpt2" -g 6 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.00001 -p 20 -d "logs/tests/srn18_vae_dgpt2_z2/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2_z/best.pth" -ud -sc 
+python train.py -tn="cs573-proj-dgpt2" -g 6 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.00005 -p 20 -d "logs/tests/srn18_vae_dgpt2_z1/" -b 128 -o adamw -aew "logs/tests/srn18_vae_l1_w2_z/best.pth" -ud -sc 
+
+
+
+# finetune entire model (including autoencoder)
+python train.py -tn="cs573-proj-dgpt2" -g 4 -m distilgpt2_srn18_vae -mt decoder -e 200 -lr 0.000005 -p 20 -d "logs/tests/srn18_vae_dgpt2_c_ft/" -b 128 -o adamw -fe 0 -capw "logs/tests/srn18_vae_dgpt2_c/best.pth" -ud -sc 
+
+

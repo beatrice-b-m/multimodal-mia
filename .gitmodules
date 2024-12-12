@@ -1,0 +1,3 @@
+[submodule "training/sepresnet"]
+	path = training/sepresnet
+	url = https://github.com/beatrice-b-m/sepresnet.git
