@@ -54,6 +54,33 @@ def get_distilgpt2_srn18_vae(param_dict: dict):
     return model
 
 
+from typing import Optional
+from typing import Self # python 3.11+
+import math
+
+class BeamStep:
+    def __init__(self, id: int, prob: float, parent: Optional[Self]) -> None:
+        # probability is stored as log probs so the sum of log sequence probs is equivalent to
+        # the log of the product of raw sequence probs
+        self.id: int = id
+        self.logprob: float = math.log(prob + 1e-9)
+
+        self.parent: Optional[Self] = parent
+
+        if self.parent is None: # if parent does not exist
+            self.sequence: list[int] = [self.id]
+            self.sequence_logprob: float = self.logprob
+
+        else: # if parent does exist
+            self.sequence: list[int] = [*self.parent.sequence, self.id]
+            self.sequence_logprob: float = self.parent.sequence_logprob + self.logprob
+
+    def __len__(self):
+        return len(self.sequence)
+
+    def __repr__(self) -> str:
+        return f"BeamStep(sequence={self.sequence}, logprob={self.sequence_logprob:.3f})"
+
 class ImageCaptioner(nn.Module):
     def __init__(self, encoder: nn.Module, decoder: nn.Module, tokenizer: nn.Module, freeze_encoder: bool = True):
         super().__init__()
@@ -63,40 +90,84 @@ class ImageCaptioner(nn.Module):
         self.tokenizer = tokenizer
 
         if freeze_encoder:
-            self.encoder.requires_grad_ = False
+            self.encoder.requires_grad_ = False # type: ignore
 
         self.device = None
         
     def tokenize(self, captions, **kwargs):
         return self.tokenizer(captions, return_tensors="pt", padding=True, truncation=False, **kwargs)
 
-    def get_embeddings(self, images):
+    def _get_embeddings(self, images):
         z, _, _ = self.encoder(images)
         return z
 
-    def _get_caption(self, image_embedding, max_length: int = 40):
-        # prepare initial input and attention mask for the decoder
-        input_ids = torch.tensor([[self.tokenizer.bos_token_id]]).to(self.device)
+    def _get_caption(self, image_embedding, max_length: int = 20, beam_width: int = 2, batch_size: int = 128):
+        # create an initial beam step object (with the bos token id)
+        # and add it to the initial iteration step
+        init_step = BeamStep(
+            id=self.tokenizer.bos_token_id,
+            prob=1.0,
+            parent=None
+        )
+        step_queue: list[BeamStep] = [init_step]
+        sequence_list: list[BeamStep] = []
         
-        # custom generation loop so we can use image embeddings
-        generated_tokens = input_ids
-        for _ in range(max_length - 1):
-            outputs = self.decoder(
-                input_ids=generated_tokens,
-                # attention_mask=tokens['attention_mask'],
-                encoder_hidden_states=image_embedding,
-                use_cache=True,
-            )
-            # get output logits then take the most likely
-            next_token_logits = outputs.logits[:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
-            generated_tokens = torch.cat((generated_tokens, next_token), dim=1)
-            if next_token.item() == self.tokenizer.eos_token_id:
+        # on each iteration (up to the max allowed sequence length)
+        # iterate over the beams in the iteration beam_list
+        for _ in range(max_length):
+            # if the current step queue is empty break early
+            if not len(step_queue):
                 break
-        
-        return generated_tokens
+            
+            # our step_queue contains sequences the list of sequences to evaluate next
+            # on our first iteration it just contains our BOS token
+            # and is then overwritten by our filled next_step_queue at the end of the iteration
+            
+            # evaluate queue in batches
+            queue_inputs = torch.tensor([s.sequence for s in step_queue])
+            queue_inputs = torch.tensor_split(queue_inputs, (len(queue_inputs)//batch_size)+1, dim=0)
     
-    def generate_caption(self, image, skip_special_tokens: bool = True, n_beams: int = 1):
+            # iterate over batches and concatenate outputs in queue_logits
+            queue_logits = []
+            for queue_slice in queue_inputs:
+                queue_logits.append(
+                    self.decoder(
+                        input_ids=queue_slice.to(self.device),
+                        encoder_hidden_states=image_embedding,
+                        use_cache=True, # should we?
+                    ).logits[:, -1, :].cpu().detach()
+                )
+            queue_probs = torch.nn.functional.softmax(torch.vstack(queue_logits), dim=-1)
+            queue_top_probs, queue_top_ids = torch.topk(queue_probs, k=beam_width, dim=-1)                    
+
+            # add all possible steps to the candidate list
+            candidate_list = []
+            for i, step_object in enumerate(step_queue):
+                for token_id, token_prob in zip(queue_top_ids[i, :].tolist(), queue_top_probs[i, :].tolist()):
+                    candidate_list.append(
+                        BeamStep(
+                            id=token_id,
+                            prob=token_prob,
+                            parent=step_object,
+                        )
+                    )
+
+            # prune candidates
+            candidate_list = sorted(candidate_list, key=lambda s: s.sequence_logprob, reverse=True)[:beam_width]
+
+            # clear previous step queue and choose to add current candidates to the
+            # completed sequences list or next step queue
+            step_queue = []
+            for candidate_step in candidate_list:
+                if candidate_step.id == self.tokenizer.eos_token_id:
+                    sequence_list.append(candidate_step)
+                else:
+                    step_queue.append(candidate_step)
+        
+        # return generated_tokens
+        return sequence_list
+    
+    def generate_caption(self, image, skip_special_tokens: bool = True, **kwargs):
         if self.device is None:
             self.device = next(self.parameters()).device
         
@@ -104,19 +175,17 @@ class ImageCaptioner(nn.Module):
         image = image.unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            image_embedding = self.get_embeddings(image).unsqueeze(1)
+            image_embedding = self._get_embeddings(image).unsqueeze(1)
+            sequence_list = self._get_caption(image_embedding, **kwargs)
 
-            generated_tokens = self._get_caption(image_embedding)
-
-            generated_caption = self.tokenizer.decode(
-                generated_tokens.detach().cpu()[0],
-                skip_special_tokens=skip_special_tokens
-            )
-
-        return generated_caption
+        # select the sequence with the highest probability
+        best_sequence = max(sequence_list, key=lambda s: s.sequence_logprob)
+        best_tokens = self.tokenizer.decode(best_sequence.sequence, skip_special_tokens=skip_special_tokens)
+    
+        return {"ids": best_sequence.sequence, "tokens": best_tokens}
 
     def forward(self, images, tokens):
-        embeddings = self.get_embeddings(images)
+        embeddings = self._get_embeddings(images)
 
         outputs = self.decoder(
             input_ids=tokens['input_ids'],
