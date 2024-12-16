@@ -83,7 +83,12 @@ def get_dataset(transform_list, dataset_type: str, data_dir: str, seed: int):
     # data_dir: e.g. 'data/mscoco'
 
     # define paths and load coco api dataset object
-    caption_path = f"{data_dir}/annotations/captions_{dataset_type}.json"
+    if dataset_type == 'test2014':
+        # we don't have captions for the train set so we have to load a different file
+        caption_path = f"{data_dir}/annotations/image_info_{dataset_type}.json"
+    else:
+        caption_path = f"{data_dir}/annotations/captions_{dataset_type}.json"
+
     image_dir = f"{data_dir}/images/{dataset_type}/"
     coco_dataset = COCO(caption_path)
 
