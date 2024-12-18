@@ -45,6 +45,7 @@ class ThreadSafeBatch:
     def add(self, inputs: dict[str, torch.Tensor]):
         with self._lock: # threads will block here if trying to add data during model execution
             fill_idx = self.request_fill_index()
+            # print(f"{fill_idx = }")
             for tensor_key, input_tensor in inputs.items():
                 self._dict[tensor_key][fill_idx] = input_tensor
             # give threads a copy of the fill index and a batch_airlock object which will synchronize exit/entry
@@ -71,11 +72,13 @@ class ThreadSafeBatch:
         # register model outputs for last batch (should be detached and transferred to cpu by now)
         self.outputs = outputs
         # wait at the in_barrier to allow subscribed threads to access the batch outputs
+        # print(f"{self.outputs.shape = }")
         self.batch_airlock.in_barrier.wait()
         # then wait at the out_barrier to prevent the main thread from discarding output 
         # data before subthreads can access it
         self.batch_airlock.out_barrier.wait()
         # initialize the batch then finally release the lock
+        # print('re-init')
         self.init_batch()
         self._lock.release()
 
@@ -160,7 +163,7 @@ class DynamicBarrier:
 
 
 class BeamStep:
-    def __init__(self, id: int, prob: float, parent: Optional[Self], alpha: float = 0.7) -> None:
+    def __init__(self, id: int, prob: float, parent: Optional[Self], alpha: float = 0.2) -> None:
         # probability is stored as log probs so the sum of log sequence probs is equivalent to
         # the log of the product of raw sequence probs
         self.id: int = id
@@ -176,13 +179,13 @@ class BeamStep:
             self.sequence: list[int] = [*self.parent.sequence, self.id]
             self.sequence_logprob: float = self.parent.sequence_logprob + self.logprob
 
-        self.sequence_norm_logprob: float = self.sequence_logprob / (len(self.sequence) ** alpha)
+        self.sequence_norm_logprob: float = self.sequence_logprob / 1.0#(len(self.sequence) ** alpha)
 
     def __len__(self):
         return len(self.sequence)
 
     def __repr__(self) -> str:
-        return f"BeamStep(sequence={self.sequence}, norm_logprob={self.sequence_norm_logprob:.3f})"
+        return f"BeamStep(sequence={self.sequence}, norm_logprob={self.sequence_logprob:.3f})"
 
 
 class SharedDict:

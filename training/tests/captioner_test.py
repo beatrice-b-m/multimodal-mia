@@ -2,8 +2,8 @@
 
 if __name__ == "__main__":
     # scripts
-    from .data import get_transform_list, get_dataset, CombinedDataset, Subset
-    from .models import get_distilgpt2_srn18_vae
+    from ..data import get_transform_list, get_dataset, CombinedDataset, Subset
+    from ..models import get_distilgpt2_srn18_vae
     import random
     import time
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     test_ds = get_dataset(transform_list, dataset_type="test2014", data_dir=DATA_DIR, seed=SEED)
 
     random_gen = random.Random(SEED)
-    n_subset = 500
+    n_subset = 100
     train_idxs = random_gen.sample(range(len(train_ds)), n_subset)
     test_idxs = random_gen.sample(range(len(test_ds)), n_subset)
 
@@ -45,10 +45,10 @@ if __name__ == "__main__":
     image, _ = val_ds[0]
     single_output = model.generate_caption(image)
     print(f"elapsed: {time.time() - start_time}s")
-    print(f"{len(single_output) = }")
     print(f"{single_output = }")
+    print(f"{len(single_output) = }")
 
     print('\n\nbatch image test')
     batch_outputs = model.generate_batch_captions(mia_ds)
+    print(f"{batch_outputs[0] = }")
     print(f"{len(batch_outputs) = }")
-    # print(f"{batch_outputs = }")
