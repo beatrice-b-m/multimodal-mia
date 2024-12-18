@@ -1,11 +1,43 @@
-from torch import float32, Generator
-from torch.utils.data import Dataset, DataLoader#, random_split
+from torch import float32, Generator, tensor
+from torch.utils.data import Subset, Dataset, DataLoader#, random_split
 from torchvision.transforms import v2
 from torch.utils.data.distributed import DistributedSampler
 
 from pycocotools.coco import COCO
 import random
 import cv2 as cv
+
+
+class CombinedDataset(Dataset):
+    """
+    Create a torch.utils.data.Dataset subclass so we can combine our train/test
+    datasets to infer membership status with MIA
+    """
+    def __init__(self, dataset_a, dataset_b, label_a: int, label_b: int):
+        self.dataset_a = dataset_a
+        self.dataset_b = dataset_b
+        
+        self.length_a = len(dataset_a)
+        self.length_b = len(dataset_b)
+        
+        self.label_a = label_a
+        self.label_b = label_b
+
+    def __len__(self):
+        return self.length_a + self.length_b
+
+    def __getitem__(self, idx):
+        if idx < self.length_a:
+            # get item from dataset a
+            img, _ = self.dataset_a[idx]
+            label = tensor(self.label_a)
+        else:
+            # get item from dataset a
+            img, _ = self.dataset_b[idx - self.length_a]
+            label = tensor(self.label_b)
+            
+        return {"image": img, "index": idx, "label": label}
+
 
 
 
@@ -31,8 +63,10 @@ class COCODataset(Dataset):
             img = self.transform(img)
 
         caption_id = self.coco.getAnnIds(imgIds = img_meta['id'])
-        caption = self._process_caption(self._random.choice(self.coco.loadAnns(caption_id))['caption'])
-        
+        try:
+            caption = self._process_caption(self._random.choice(self.coco.loadAnns(caption_id))['caption'])
+        except IndexError:
+            caption = None
         return img, caption
     
     def _process_caption(self, caption: str):
