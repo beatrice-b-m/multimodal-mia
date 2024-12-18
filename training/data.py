@@ -42,7 +42,7 @@ class CombinedDataset(Dataset):
 
 
 class COCODataset(Dataset):
-    def __init__(self, coco: COCO, base_path: str, transform=None, seed=2196):
+    def __init__(self, coco: COCO, base_path: str, transform=None, seed=2196, return_dict: bool = True):
         self.coco = coco
         self.base_path = base_path
             
@@ -50,6 +50,7 @@ class COCODataset(Dataset):
         self._random = random.Random(seed)
 
         self.img_meta_list = self.coco.dataset['images']
+        self.return_dict = return_dict
 
     def __len__(self):
         return len(self.img_meta_list)
@@ -67,7 +68,10 @@ class COCODataset(Dataset):
             caption = self._process_caption(self._random.choice(self.coco.loadAnns(caption_id))['caption'])
         except IndexError:
             caption = None
-        return img, caption
+        if self.return_dict:
+            return {"image": img, "caption": caption}
+        else: # compatibility
+            return img, caption
     
     def _process_caption(self, caption: str):
         return caption.strip()
