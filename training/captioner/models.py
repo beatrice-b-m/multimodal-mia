@@ -4,7 +4,7 @@ from .generation import CaptionGenerator
 class ImageCaptioner(CaptionGenerator):
     max_length = 30
     embed_dim = 768
-    beam_width: int = 2
+    beam_width: int = 4
 
     image_size = 128
     image_channels = 3
