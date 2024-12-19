@@ -1,6 +1,0 @@
-python train.py -tn="cs573-proj-vae" -g 5 -m srn18_vae -mt vae -e 60 -lr 0.001 -p 40 -d "logs/tests/srn18_vae_l1/" -b 256 -o adam -lo L1 -ud -sc
-python train.py -tn="cs573-proj-vae" -g 5 -m srn18_vae -mt vae -e 60 -lr 0.001 -p 40 -d "logs/tests/srn18_vae_l1_w/" -b 256 -o adamw -lo L1 -ud -sc
-
-
-python train.py -tn="cs573-proj-vae" -g 5 -m srn50_vae -mt vae -e 120 -lr 0.001 -p 40 -d "logs/tests/srn50_vae_l1/" -b 256 -o adam -lo L1 -ud -sc
-python train.py -tn="cs573-proj-vae" -g 5 -m srn50_vae -mt vae -e 120 -lr 0.001 -p 40 -d "logs/tests/srn50_vae_l1_w/" -b 256 -o adamw -lo L1 -ud -sc
